@@ -26,7 +26,14 @@ async function handleScheduledCaffeinate(schedule: Schedule): Promise<boolean> {
 
   // If the current time is within scheduled time, start caffeination
   if (isWithinSchedule === true && schedule.IsRunning === false) {
-    const duration = (endHour - startHour) * 3600 + (endMinute - startMinute) * 60;
+    // Duration must be the time remaining until the schedule's end, not the
+    // full start-to-end span — this check doesn't necessarily run exactly at
+    // the scheduled start (background interval is 15s, and the PC could have
+    // been asleep or Raycast could have just launched), so using the full
+    // span would run caffeination well past the intended end time.
+    const endTime = new Date(currentDate);
+    endTime.setHours(endHour, endMinute, 0, 0);
+    const duration = Math.max(1, Math.round((endTime.getTime() - currentDate.getTime()) / 1000));
     await startCaffeinate({ status: true }, undefined, { durationSeconds: duration });
     schedule.IsRunning = true;
     await LocalStorage.setItem(schedule.day, JSON.stringify(schedule));
@@ -51,14 +58,16 @@ export async function checkSchedule() {
 }
 
 export default async function Command() {
-  const isCaffeinated = await isCaffeinateRunning();
-  const isScheduled = await checkSchedule();
+  // This runs unattended on a 15s background interval — a transient failure
+  // (e.g. a slow WMI query) shouldn't throw and spam errors; just skip this
+  // tick and let the next one try again.
+  try {
+    const isCaffeinated = await isCaffeinateRunning();
+    const isScheduled = await checkSchedule();
 
-  let subtitle = "✖ Decaffeinated";
-
-  if (isCaffeinated || isScheduled) {
-    subtitle = "✔ Caffeinated";
+    const subtitle = isCaffeinated || isScheduled ? "✔ Caffeinated" : "✖ Decaffeinated";
+    updateCommandMetadata({ subtitle });
+  } catch (error) {
+    console.error("Failed to refresh caffeination status:", error);
   }
-
-  updateCommandMetadata({ subtitle });
 }

@@ -21,9 +21,22 @@ export default async function Command(props: { arguments: Arguments.CaffeinateFo
   }
 
   const totalSeconds = Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds);
+
+  // hasValue only checked for a non-empty string (so "0" passes it) — but a
+  // duration of exactly 0 seconds would hit startCaffeinate's "0 = indefinite"
+  // sentinel and silently caffeinate forever instead of erroring or no-oping.
+  if (totalSeconds <= 0) {
+    await showToast(Toast.Style.Failure, "Please specify a duration greater than zero");
+    return;
+  }
+
   const formattedTime = `${hours ? `${hours}h` : ""}${minutes ? `${minutes}m` : ""}${seconds ? `${seconds}s` : ""}`;
 
-  await startCaffeinate({ status: true }, `Caffeinating your PC for ${formattedTime}`, {
-    durationSeconds: totalSeconds,
-  });
+  try {
+    await startCaffeinate({ status: true }, `Caffeinating your PC for ${formattedTime}`, {
+      durationSeconds: totalSeconds,
+    });
+  } catch (error) {
+    await showToast(Toast.Style.Failure, "Failed to caffeinate", String(error));
+  }
 }

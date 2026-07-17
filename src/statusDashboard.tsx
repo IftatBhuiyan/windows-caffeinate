@@ -1,4 +1,4 @@
-import { Action, ActionPanel, Color, Icon, LaunchType, List, launchCommand } from "@raycast/api";
+import { Action, ActionPanel, Color, Icon, LaunchType, List, Toast, launchCommand, showToast } from "@raycast/api";
 import { usePromise } from "@raycast/utils";
 import { useEffect, useState } from "react";
 import { CaffeinationInfo, formatDuration, getCaffeinationInfo, startCaffeinate, stopCaffeinate } from "./utils";
@@ -69,18 +69,26 @@ export default function Command() {
   const handleStartFor = async (seconds: number | null, durationLabel: string) => {
     const hudMessage =
       seconds === null ? `Caffeinating your PC ${durationLabel}` : `Caffeinating your PC for ${durationLabel}`;
-    await mutate(
-      startCaffeinate({ status: true }, hudMessage, seconds === null ? undefined : { durationSeconds: seconds }),
-      {
-        optimisticUpdate: () => ({ running: true, totalSeconds: seconds, elapsedSeconds: 0, watchPid: null }),
-      },
-    );
+    try {
+      await mutate(
+        startCaffeinate({ status: true }, hudMessage, seconds === null ? undefined : { durationSeconds: seconds }),
+        {
+          optimisticUpdate: () => ({ running: true, totalSeconds: seconds, elapsedSeconds: 0, watchPid: null }),
+        },
+      );
+    } catch (error) {
+      await showToast(Toast.Style.Failure, "Failed to caffeinate", String(error));
+    }
   };
 
   const handleDeactivate = async () => {
-    await mutate(stopCaffeinate({ status: true }, "Your PC is now decaffeinated"), {
-      optimisticUpdate: () => EMPTY_INFO,
-    });
+    try {
+      await mutate(stopCaffeinate({ status: true }, "Your PC is now decaffeinated"), {
+        optimisticUpdate: () => EMPTY_INFO,
+      });
+    } catch (error) {
+      await showToast(Toast.Style.Failure, "Failed to decaffeinate", String(error));
+    }
   };
 
   return (

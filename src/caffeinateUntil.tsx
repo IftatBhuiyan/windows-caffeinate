@@ -47,9 +47,17 @@ async function caffeinateUntilTarget(target: Date) {
       : target.toDateString() === tomorrow.toDateString()
         ? "tomorrow at "
         : `${target.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })} at `;
-  await startCaffeinate({ status: true }, `Caffeinating your PC until ${dayLabel}${formattedTime}`, {
-    durationSeconds: totalSeconds,
-  });
+
+  // Both call sites below either fire-and-forget this or chain a bare .then()
+  // with no .catch — without handling errors here, a failure would surface
+  // as a silent unhandled promise rejection instead of user-visible feedback.
+  try {
+    await startCaffeinate({ status: true }, `Caffeinating your PC until ${dayLabel}${formattedTime}`, {
+      durationSeconds: totalSeconds,
+    });
+  } catch (error) {
+    await showToast(Toast.Style.Failure, "Failed to caffeinate", String(error));
+  }
 }
 
 function defaultPickerTarget(): Date {

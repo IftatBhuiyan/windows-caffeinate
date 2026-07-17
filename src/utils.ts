@@ -82,10 +82,9 @@ export async function startCaffeinate(
   hudMessage?: string,
   opts?: { durationSeconds?: number; watchPid?: number },
 ) {
-  if (hudMessage) {
-    await showHUD(hudMessage);
-  }
-
+  // Do the actual work before announcing success — showing the HUD first
+  // (as the Mac version does) would lie to the user if the launch below
+  // fails partway through.
   await killHelperProcesses();
 
   const preferences = getPreferenceValues<Preferences>();
@@ -116,22 +115,26 @@ export async function startCaffeinate(
 
   const launcherScript = `Start-Process -WindowStyle Hidden -FilePath 'powershell.exe' -ArgumentList @(${helperArgs.map(psQuote).join(", ")}) | Out-Null`;
 
-  await runPowerShellScript(launcherScript, { timeout: 5000 });
+  await runPowerShellScript(launcherScript, { timeout: 8000 });
   await update(updates, true);
-}
 
-export async function stopCaffeinate(updates: Updates, hudMessage?: string) {
   if (hudMessage) {
     await showHUD(hudMessage);
   }
+}
 
+export async function stopCaffeinate(updates: Updates, hudMessage?: string) {
   await killHelperProcesses();
   await update(updates, false);
+
+  if (hudMessage) {
+    await showHUD(hudMessage);
+  }
 }
 
 async function killHelperProcesses() {
   const script = `Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object { $_.CommandLine -match '-File\\s+.*${PROCESS_MARKER}' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }`;
-  await runPowerShellScript(script, { timeout: 5000 });
+  await runPowerShellScript(script, { timeout: 8000 });
 }
 
 async function update(updates: Updates, caffeinated: boolean) {
@@ -150,7 +153,7 @@ async function tryLaunchCommand(commandName: string, context: { caffeinated: boo
 
 export async function isCaffeinateRunning(): Promise<boolean> {
   const script = `$m = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" | Where-Object { $_.CommandLine -match '-File\\s+.*${PROCESS_MARKER}' }\nif ($m) { Write-Output '1' } else { Write-Output '0' }`;
-  const output = await runPowerShellScript(script, { timeout: 5000 });
+  const output = await runPowerShellScript(script, { timeout: 8000 });
   return output.trim() === "1";
 }
 
@@ -171,7 +174,7 @@ if ($m) {
   // runPowerShellScript's return type is always Promise<string> regardless of
   // `parseOutput` (unlike useExec/runAppleScript, which propagate the generic) —
   // so parse the JSON ourselves after getting the raw string back.
-  const stdout = await runPowerShellScript(script, { timeout: 5000 });
+  const stdout = await runPowerShellScript(script, { timeout: 8000 });
   const trimmed = stdout.trim();
   if (!trimmed) {
     return { running: false, totalSeconds: null, elapsedSeconds: null, watchPid: null };
@@ -192,7 +195,7 @@ export async function getRunningApps(): Promise<RunningApp[]> {
     "Select-Object @{Name='name';Expression={$_.MainWindowTitle}}, @{Name='pid';Expression={$_.Id}} | " +
     "ConvertTo-Json -Compress";
 
-  const stdout = await runPowerShellScript(script, { timeout: 5000 });
+  const stdout = await runPowerShellScript(script, { timeout: 8000 });
   const trimmed = stdout.trim();
   if (!trimmed) return [];
   const parsed = JSON.parse(trimmed);

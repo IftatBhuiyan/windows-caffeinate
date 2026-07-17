@@ -103,37 +103,52 @@ export default function Command() {
   };
 
   const handlePauseSchedule = async (schedule: Schedule) => {
-    changeScheduleState("decaffeinate", schedule);
-    await showToast(
-      Toast.Style.Success,
-      `Schedule for ${schedule.day.charAt(0).toUpperCase() + schedule.day.slice(1).toLowerCase()} is now paused`,
-    );
+    try {
+      // changeScheduleState is async (it awaits LocalStorage.setItem) — it was
+      // previously called without awaiting, so the write to disk wasn't
+      // guaranteed to finish before this function returned or before a
+      // subsequent read of the same day's schedule.
+      await changeScheduleState("decaffeinate", schedule);
 
-    if (isTodaysSchedule(schedule)) {
-      await stopCaffeinate({ status: true });
+      if (isTodaysSchedule(schedule)) {
+        await stopCaffeinate({ status: true });
+      }
+
+      // Show success only after the state change and stop actually succeeded —
+      // showing it first (as before) would claim success even if stopCaffeinate
+      // then threw.
+      await showToast(
+        Toast.Style.Success,
+        `Schedule for ${schedule.day.charAt(0).toUpperCase() + schedule.day.slice(1).toLowerCase()} is now paused`,
+      );
+
+      setSchedules((prevSchedules) =>
+        prevSchedules.map((s) => (s.day === schedule.day ? { ...s, IsRunning: false, IsManuallyDecafed: true } : s)),
+      );
+    } catch (error) {
+      await showToast(Toast.Style.Failure, "Failed to pause schedule", String(error));
     }
-
-    // Update the state to reflect the paused schedule
-    setSchedules((prevSchedules) =>
-      prevSchedules.map((s) => (s.day === schedule.day ? { ...s, IsRunning: false, IsManuallyDecafed: true } : s)),
-    );
   };
 
   const handleResumeSchedule = async (schedule: Schedule) => {
-    changeScheduleState("caffeinate", schedule);
-    await showToast(
-      Toast.Style.Success,
-      `Schedule for ${schedule.day.charAt(0).toUpperCase() + schedule.day.slice(1).toLowerCase()} is now resumed`,
-    );
+    try {
+      await changeScheduleState("caffeinate", schedule);
 
-    const isScheduled = await checkSchedule();
+      const isScheduled = await checkSchedule();
 
-    // Update the state to reflect the resumed schedule
-    setSchedules((prevSchedules) =>
-      prevSchedules.map((s) =>
-        s.day === schedule.day ? { ...s, IsRunning: isScheduled, IsManuallyDecafed: false } : s,
-      ),
-    );
+      await showToast(
+        Toast.Style.Success,
+        `Schedule for ${schedule.day.charAt(0).toUpperCase() + schedule.day.slice(1).toLowerCase()} is now resumed`,
+      );
+
+      setSchedules((prevSchedules) =>
+        prevSchedules.map((s) =>
+          s.day === schedule.day ? { ...s, IsRunning: isScheduled, IsManuallyDecafed: false } : s,
+        ),
+      );
+    } catch (error) {
+      await showToast(Toast.Style.Failure, "Failed to resume schedule", String(error));
+    }
   };
 
   return (
